@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Созвездие</title>
+    <script>
+      (() => {
+        const accents = ["lavender", "rose", "peach", "mint", "sky", "lilac", "yellow", "gray", "brown"];
+        document.documentElement.dataset.accent = "lavender";
+        try {
+          const settings = JSON.parse(localStorage.getItem("settings") || "{}");
+          if (settings && accents.includes(settings.accent)) {
+            document.documentElement.dataset.accent = settings.accent;
+          }
+        } catch (error) {
+          console.error("Не удалось прочитать акцентный цвет:", error);
+        }
+      })();
+    </script>
+    <meta name="theme-color" content="#8b8fe8">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="stylesheet" href="./style.css">
+    <script src="./script.js" defer></script>
+    <link rel="icon" type="image/png" href="./icons/icon-192.png">
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          try {
+            navigator.serviceWorker.register("./service-worker.js").catch((error) => {
+              console.error("Не удалось зарегистрировать service worker:", error);
+            });
+          } catch (error) {
+            console.error("Не удалось зарегистрировать service worker:", error);
+          }
+        });
+      }
+    </script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>Созвездие</h1>
+        <div class="app-header-actions">
+          <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Включить тёмную тему" title="Включить тёмную тему">
+            <img src="./icons/moon.svg" alt="" width="20" height="20">
+          </button>
+          <button class="settings-toggle" id="settings-toggle" type="button" aria-expanded="false" aria-label="Настройки" title="Настройки">
+            <img src="./icons/settings.svg" alt="" width="20" height="20">
+          </button>
+        </div>
+      </header>
+
+      <header class="calendar-header">
+        <button class="month-button" id="previous-month" type="button" aria-label="Предыдущий месяц">←</button>
+        <h2 id="month-title" aria-live="polite"></h2>
+        <button class="month-button" id="next-month" type="button" aria-label="Следующий месяц">→</button>
+      </header>
+
+      <div class="calendar-layout" id="calendar-layout">
+        <section class="calendar" aria-label="Календарь активности">
+          <section class="weekly-progress" aria-label="Прогресс дня и недели">
+            <section class="today-progress" id="today-progress" aria-label="Сегодня">
+              <h3>Сегодня</h3>
+              <div class="daily-goal-scales" id="daily-goal-scales">
+                <div class="daily-goal-scale" id="workout-daily-goal">
+                  <div class="daily-goal-scale-heading">
+                    <span>Тренировки</span>
+                    <span class="daily-goal-value">0 / 45 мин</span>
+                  </div>
+                  <div class="daily-goal-track" role="progressbar" aria-label="Тренировки" aria-valuemin="0" aria-valuemax="45" aria-valuenow="0" aria-valuetext="0 / 45 мин">
+                    <span class="daily-goal-fill"></span>
+                  </div>
+                </div>
+                <div class="daily-goal-scale" id="walk-daily-goal">
+                  <div class="daily-goal-scale-heading">
+                    <span>Прогулки</span>
+                    <span class="daily-goal-value">0 / 30 мин</span>
+                  </div>
+                  <div class="daily-goal-track" role="progressbar" aria-label="Прогулки" aria-valuemin="0" aria-valuemax="30" aria-valuenow="0" aria-valuetext="0 / 30 мин">
+                    <span class="daily-goal-fill"></span>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <section class="this-week-progress" aria-label="Эта неделя">
+              <h3>Эта неделя</h3>
+              <p class="week-range" id="week-range"></p>
+              <div class="week-progress-days" id="week-progress-days"></div>
+              <p id="training-progress">Тренировки: 0 из 3 дней</p>
+              <p id="walk-progress">Прогулки: 0 из 5 дней</p>
+              <p id="weekly-totals">Итоги недели: 0 тренировок; прогулки — 0 мин</p>
+            </section>
+          </section>
+          <div class="weekdays" aria-hidden="true">
+            <span>Пн</span>
+            <span>Вт</span>
+            <span>Ср</span>
+            <span>Чт</span>
+            <span>Пт</span>
+            <span>Сб</span>
+            <span>Вс</span>
+          </div>
+          <div class="calendar-days" id="calendar-days"></div>
+        </section>
+
+        <dialog class="entry-panel" id="entry-panel" aria-labelledby="entry-title">
+          <header class="entry-panel-header">
+            <h2 id="entry-title"></h2>
+            <button class="close-button" id="close-entry-dialog" type="button" aria-label="Закрыть панель дня">✕</button>
+          </header>
+
+          <div class="entry-panel-scroll">
+          <div class="entry-view" id="entry-view" hidden>
+            <h3>Как прошёл день</h3>
+            <ul class="day-activity-list" id="entry-view-activities"></ul>
+            <p class="empty-activity-message" id="entry-view-empty">Активностей нет</p>
+            <p>Стаканов воды: <span id="entry-view-water"></span></p>
+            <p>Сон с: <span id="entry-view-sleep"></span></p>
+            <p>Пробуждение: <span id="entry-view-wake"></span></p>
+            <p class="sleep-duration" id="entry-view-sleep-duration" hidden></p>
+            <p id="entry-view-note"></p>
+            <div class="entry-view-actions">
+              <button class="secondary-button" id="back-to-edit" type="button">Редактировать</button>
+              <button class="secondary-button" id="close-entry-view" type="button">Закрыть</button>
+            </div>
+            <p class="save-status" id="entry-view-status" role="status"></p>
+          </div>
+
+          <div class="entry-form" id="entry-form">
+            <h3>Активности</h3>
+            <p class="empty-activity-message" id="day-activities-empty" hidden>Активностей нет</p>
+            <ul class="day-activity-list" id="day-activity-list"></ul>
+            <div class="daily-goal-scales" id="day-daily-goal-scales">
+              <div class="daily-goal-scale" id="day-workout-daily-goal">
+                <div class="daily-goal-scale-heading">
+                  <span>Тренировки</span>
+                  <span class="daily-goal-value">0 / 45 мин</span>
+                </div>
+                <div class="daily-goal-track" role="progressbar" aria-label="Тренировки за день" aria-valuemin="0" aria-valuemax="45" aria-valuenow="0" aria-valuetext="0 / 45 мин">
+                  <span class="daily-goal-fill"></span>
+                </div>
+              </div>
+              <div class="daily-goal-scale" id="day-walk-daily-goal">
+                <div class="daily-goal-scale-heading">
+                  <span>Прогулки</span>
+                  <span class="daily-goal-value">0 / 30 мин</span>
+                </div>
+                <div class="daily-goal-track" role="progressbar" aria-label="Прогулки за день" aria-valuemin="0" aria-valuemax="30" aria-valuenow="0" aria-valuetext="0 / 30 мин">
+                  <span class="daily-goal-fill"></span>
+                </div>
+              </div>
+            </div>
+            <div class="day-activity-add-controls">
+              <button class="secondary-button" id="add-day-activity" type="button">Добавить активность</button>
+              <p class="empty-activity-message" id="rest-activity-add-notice" hidden>В день без активности другие записи не добавляются.</p>
+            </div>
+
+            <span class="field-label" id="water-label">Стаканов воды</span>
+            <div class="water-counter" aria-labelledby="water-label">
+              <button class="counter-button" id="water-minus" type="button" aria-label="Уменьшить количество стаканов воды">−</button>
+              <output id="water-count" aria-live="polite">0</output>
+              <button class="counter-button" id="water-plus" type="button" aria-label="Увеличить количество стаканов воды">+</button>
+            </div>
+
+            <div class="sleep-field" id="sleep-field">
+              <span class="field-label">Сон с</span>
+              <div class="sleep-time-control" id="sleep-time-control"></div>
+            </div>
+
+            <div class="sleep-field" id="wake-field">
+              <span class="field-label">Пробуждение</span>
+              <div class="sleep-time-control" id="wake-time-control"></div>
+            </div>
+            <p class="sleep-duration" id="sleep-duration" hidden></p>
+
+            <label for="entry-text">Запись за этот день</label>
+            <textarea id="entry-text" rows="4" placeholder="Добавьте запись..."></textarea>
+            <p class="load-warning" id="load-warning" hidden>Прислушайся к себе: отдых тоже часть прогресса.</p>
+            <div class="entry-form-actions">
+              <button class="clear-entry-link" id="clear-entry" type="button" hidden>Очистить</button>
+              <div class="entry-form-actions-right">
+                <button class="secondary-button" id="finish-entry" type="button">Завершить день</button>
+                <button class="save-button" id="save-entry" type="button">Сохранить</button>
+              </div>
+            </div>
+            <p class="save-status" id="save-status" role="status"></p>
+          </div>
+          </div>
+        </dialog>
+      </div>
+
+      <dialog class="settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
+        <header class="settings-dialog-header">
+          <h2 id="settings-title">Настройки</h2>
+          <button class="close-button" id="settings-close" type="button" aria-label="Закрыть настройки">✕</button>
+        </header>
+        <input class="settings-tab-radio" id="settings-tab-general" type="radio" name="settings-tab" checked>
+        <input class="settings-tab-radio" id="settings-tab-activities" type="radio" name="settings-tab">
+        <input class="settings-tab-radio" id="settings-tab-time" type="radio" name="settings-tab">
+        <nav class="settings-tabs" aria-label="Разделы настроек">
+          <label class="settings-tab" for="settings-tab-general">Общие</label>
+          <label class="settings-tab" for="settings-tab-activities">Активности</label>
+          <label class="settings-tab" for="settings-tab-time">Время</label>
+        </nav>
+
+        <div class="settings-tab-content">
+          <section class="settings-tab-panel" id="settings-panel-general" aria-label="Общие">
+            <div class="settings-goal-group">
+              <h3>Цели на день</h3>
+              <p class="settings-group-help">Дневные цели считаются в минутах.</p>
+              <label for="workout-minutes-goal-setting">Цель тренировок (минут)</label>
+              <input id="workout-minutes-goal-setting" type="number" min="0" max="600" step="1" inputmode="numeric" value="45">
+              <p class="setting-field-error" id="workout-minutes-goal-error" role="status" hidden></p>
+              <label for="walk-minutes-goal-setting">Цель прогулок (минут)</label>
+              <input id="walk-minutes-goal-setting" type="number" min="0" max="600" step="1" inputmode="numeric" value="30">
+              <p class="setting-field-error" id="walk-minutes-goal-error" role="status" hidden></p>
+            </div>
+            <div class="settings-goal-group">
+              <h3>Цели на неделю</h3>
+              <p class="settings-group-help">Недельные нормы считаются в днях с активностью.</p>
+              <label for="workout-days-goal">Тренировок (дней)</label>
+              <input id="workout-days-goal" type="number" min="0" max="7" step="1" inputmode="numeric" value="3">
+              <p class="setting-field-error" id="workout-days-goal-error" role="status" hidden></p>
+              <label for="walk-days-goal">Прогулок (дней)</label>
+              <input id="walk-days-goal" type="number" min="0" max="7" step="1" inputmode="numeric" value="5">
+              <p class="setting-field-error" id="walk-days-goal-error" role="status" hidden></p>
+            </div>
+            <div class="settings-goal-group">
+              <h3>Мягкие лимиты</h3>
+              <p class="settings-group-help">Лимиты только напоминают об отдыхе и ничего не запрещают.</p>
+              <label for="max-workouts-setting">Максимум тренировок в день</label>
+              <input id="max-workouts-setting" type="number" min="0" step="1" inputmode="numeric" value="2">
+              <p class="setting-field-error" id="max-workouts-error" role="status" hidden></p>
+              <label for="max-active-minutes-setting">Максимум минут активности в день</label>
+              <input id="max-active-minutes-setting" type="number" min="0" step="1" inputmode="numeric" value="120">
+              <p class="setting-field-error" id="max-active-minutes-error" role="status" hidden></p>
+            </div>
+            <h3>Акцентный цвет</h3>
+            <div class="accent-color-options" id="accent-palette" role="group" aria-label="Акцентный цвет">
+              <button class="accent-color-option" type="button" data-accent-choice="lavender" aria-label="Лавандовый" title="Лавандовый"></button>
+              <button class="accent-color-option" type="button" data-accent-choice="rose" aria-label="Розовый" title="Розовый"></button>
+              <button class="accent-color-option" type="button" data-accent-choice="peach" aria-label="Персиковый" title="Персиковый"></button>
+              <button class="accent-color-option" type="button" data-accent-choice="mint" aria-label="Мятный" title="Мятный"></button>
+              <button class="accent-color-option" type="button" data-accent-choice="sky" aria-label="Голубой" title="Голубой"></button>
+              <button class="accent-color-option" type="button" data-accent-choice="lilac" aria-label="Сиреневый" title="Сиреневый"></button>
+              <button class="accent-color-option" type="button" data-accent-choice="yellow" aria-label="Жёлтый" title="Жёлтый"></button>
+              <button class="accent-color-option" type="button" data-accent-choice="gray" aria-label="Серый" title="Серый"></button>
+              <button class="accent-color-option" type="button" data-accent-choice="brown" aria-label="Коричневый" title="Коричневый"></button>
+            </div>
+            <label class="settings-checkbox">
+              <input id="animations-setting" type="checkbox">
+              Анимации
+            </label>
+            <div class="settings-goal-group">
+              <h3>Данные</h3>
+              <p class="settings-group-help">Данные хранятся только на этом устройстве. Сохраняйте копию.</p>
+              <div class="data-actions">
+                <button class="secondary-button" id="export-data" type="button">Экспорт</button>
+                <button class="secondary-button" id="import-data" type="button">Импорт</button>
+              </div>
+              <input id="import-data-file" type="file" accept=".json" hidden>
+              <div class="data-import-confirmation" id="data-import-confirmation" hidden>
+                <p id="data-import-confirmation-message"></p>
+                <div class="data-actions">
+                  <button class="save-button" id="import-with-backup" type="button">Сохранить копию и продолжить</button>
+                  <button class="secondary-button" id="import-without-backup" type="button">Продолжить без копии</button>
+                  <button class="secondary-button" id="cancel-import" type="button">Отмена</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-tab-panel" id="settings-panel-activities" aria-label="Активности">
+            <h3>Типы активности</h3>
+            <ul class="activity-type-list" id="activity-type-list"></ul>
+            <button class="save-button" id="add-activity-type" type="button">Добавить</button>
+
+            <section class="type-editor" id="type-editor" aria-labelledby="type-editor-title" hidden>
+              <h4 id="type-editor-title"></h4>
+              <label for="type-name">Название</label>
+              <input id="type-name" type="text" required>
+              <label for="type-emoji">Смайлик</label>
+              <input id="type-emoji" type="text">
+              <label for="type-color">Цвет</label>
+              <input id="type-color" type="color" value="#dce5ff">
+              <div class="editor-actions">
+                <button class="save-button" id="save-activity-type" type="button">Сохранить</button>
+                <button class="secondary-button" id="cancel-activity-type" type="button">Отмена</button>
+              </div>
+            </section>
+          </section>
+
+          <section class="settings-tab-panel" id="settings-panel-time" aria-label="Время">
+            <label class="settings-checkbox">
+              <input id="track-sleep-setting" type="checkbox">
+              Отслеживать время засыпания
+            </label>
+            <label class="settings-checkbox">
+              <input id="track-wake-setting" type="checkbox">
+              Отслеживать время пробуждения
+            </label>
+          </section>
+        </div>
+        <p class="save-status" id="settings-status" role="status"></p>
+        <footer class="settings-dialog-footer">
+          <button class="save-button" id="settings-done" type="button">Готово</button>
+        </footer>
+      </dialog>
+    </main>
+  </body>
+</html>
